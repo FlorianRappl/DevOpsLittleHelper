@@ -4,65 +4,133 @@ using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace DevOpsLittleHelper
 {
     internal class Helper
     {
-        const String collectionUri = "https://florianrappl.visualstudio.com/";
-        const String projectName = "MunichMeetup";
-        const String repoName = "PublicWeb";
-        const String baseBranchName = "master";
-        const String newBranchName = "feature/auto-ref-update";
+        private static readonly Uri collectionUri = new Uri("https://florianrappl.visualstudio.com/");
+        private static readonly String newBranchName = "feature/auto-ref-update";
 
+        private readonly String _projectId;
         private readonly GitHttpClient _gitClient;
+        private readonly TraceWriter _log;
 
-        public Helper(String pat)
+        public Helper(String projectId, String pat, TraceWriter log)
         {
-            var creds = new VssBasicCredential(String.Empty, pat);
-
-            // Connect to Azure DevOps Services
-            var connection = new VssConnection(new Uri(collectionUri), creds);
-
-            // Get a GitHttpClient to talk to the Git endpoints
-            _gitClient = connection.GetClient<GitHttpClient>();
+            _projectId = projectId;
+            _gitClient = CreateGitClient(pat);
+            _log = log;
         }
 
-        public async Task<Int32> UpdateReferenceAndCreatePullRequest(TraceWriter log)
+        public async Task<List<Int32>> UpdateReferencesAndCreatePullRequests(String packageName, String packageVersion)
         {
-            var repo = await _gitClient.GetRepositoryAsync(projectName, repoName).ConfigureAwait(false);
-            log.Info($"Received info about repo ${repoName}.");
-            var commits = await _gitClient.GetCommitsAsync(repo.Id, new GitQueryCommitsCriteria
+            var results = new List<Int32>();
+            var allRepositories = await _gitClient.GetRepositoriesAsync(_projectId).ConfigureAwait(false);
+            Log($"Received repository list: ${String.Join(", ", allRepositories.Select(m => m.Name))}.");
+
+            foreach (var repo in allRepositories)
             {
-                ItemVersion = new GitVersionDescriptor
+                var pr = await UpdateReferencesAndCreatePullRequest(repo.Name, repo.DefaultBranch, packageName, packageVersion).ConfigureAwait(false);
+
+                if (pr.HasValue)
                 {
-                    Version = baseBranchName,
-                    VersionType = GitVersionType.Branch,
-                },
-            }, top: 1).ConfigureAwait(false);
-            var lastCommit = commits.FirstOrDefault()?.CommitId;
-            log.Info($"Received info about last commits (expected 1, got {commits.Count}).");
-            var path = "SmartHotel360.PublicWeb/SmartHotel360.PublicWeb.csproj";
-            var item = await _gitClient.GetItemContentAsync(repo.Id, path, includeContent: true).ConfigureAwait(false);
-            var oldContent = await GetContent(item).ConfigureAwait(false);
-            var newContent = oldContent.Replace(
-                $"<PackageReference Include=\"Microsoft.AspNetCore.All\" Version=\"2.0.0\" />",
-                $"<PackageReference Include=\"Microsoft.AspNetCore.All\" Version=\"2.0.1\" />");
-            log.Info($"Item content of {path} received and changed.");
-            var push = CreatePush(lastCommit, path, newContent);
-            await _gitClient.CreatePushAsync(push, repo.Id).ConfigureAwait(false);
-            log.Info($"Push for {repo.Id} at {newBranchName} created.");
-            var pr = CreatePullRequest();
-            var result = await _gitClient.CreatePullRequestAsync(pr, repo.Id).ConfigureAwait(false);
-            log.Info($"Pull request for {repo.Id} to {baseBranchName} created.");
-            return result.PullRequestId;
+                    results.Add(pr.Value);
+                }
+            }
+
+            return results;
         }
 
-        private GitPullRequest CreatePullRequest() => new GitPullRequest
+        public async Task<Int32?> UpdateReferencesAndCreatePullRequest(String repoName, String baseBranchName, String packageName, String packageVersion)
+        {
+            var repo = await _gitClient.GetRepositoryAsync(_projectId, repoName).ConfigureAwait(false);
+            Log($"Received info about repo ${repoName}.");
+
+            var versionRef = GetVersionRef(baseBranchName);
+            var baseCommitInfo = GetBaseCommits(versionRef);
+            var commits = await _gitClient.GetCommitsAsync(repo.Id, baseCommitInfo, top: 1).ConfigureAwait(false);
+            var lastCommit = commits.FirstOrDefault()?.CommitId;
+            Log($"Received info about last commits (expected 1, got {commits.Count}).");
+
+            var items = await _gitClient.GetItemsAsync(_projectId, repo.Id, versionDescriptor: versionRef, recursionLevel: VersionControlRecursionType.Full).ConfigureAwait(false);
+            var changes = await GetChanges(repo.Id, packageName, packageVersion, versionRef, items).ConfigureAwait(false);
+            return await CreatePullRequestIfChanged(repo.Id, changes, lastCommit, baseBranchName).ConfigureAwait(false);
+        }
+
+        private async Task<Int32?> CreatePullRequestIfChanged(Guid repoId, List<GitChange> changes, String lastCommit, String baseBranchName)
+        {
+            if (changes.Count > 0)
+            {
+                var push = CreatePush(lastCommit, changes);
+                await _gitClient.CreatePushAsync(push, repoId).ConfigureAwait(false);
+                Log($"Push for {repoId} at {newBranchName} created.");
+
+                var pr = CreatePullRequest(baseBranchName);
+                var result = await _gitClient.CreatePullRequestAsync(pr, repoId).ConfigureAwait(false);
+                Log($"Pull request for {repoId} to {baseBranchName} created.");
+
+                return result.PullRequestId;
+            }
+
+            return null;
+        }
+
+        private async Task<List<GitChange>> GetChanges(Guid repoId, String packageName, String packageVersion, GitVersionDescriptor versionRef, IEnumerable<GitItem> items)
+        {
+            var changes = new List<GitChange>();
+
+            foreach (var item in items)
+            {
+                if (item.Path.EndsWith(".csproj"))
+                {
+                    var itemRef = await _gitClient.GetItemContentAsync(repoId, item.Path, includeContent: true, versionDescriptor: versionRef).ConfigureAwait(false);
+                    var oldContent = await itemRef.GetContent().ConfigureAwait(false);
+                    var newContent = ReplaceInContent(oldContent, packageName, packageVersion);
+
+                    if (!String.Equals(oldContent, newContent))
+                    {
+                        changes.Add(CreateChange(item.Path, newContent));
+                        Log($"Item content of {item.Path} received and changed.");
+                    }
+                }
+            }
+
+            return changes;
+        }
+
+        private static String ReplaceInContent(String oldContent, String packageName, String packageVersion)
+        {
+            var start = $"<PackageReference Include=\"{packageName}\" Version=\"";
+            var index = oldContent.IndexOf(start);
+
+            if (index != -1)
+            {
+                var end = index + start.Length;
+                var head = oldContent.Substring(0, end);
+                var tail = oldContent.Substring(oldContent.IndexOf('"', end));
+                return $"{head}{packageVersion}{tail}";
+            }
+
+            return oldContent;
+        }
+
+        private void Log(String message) => _log.Info(message);
+
+        private static GitVersionDescriptor GetVersionRef(String baseBranchName) => new GitVersionDescriptor
+        {
+            Version = baseBranchName,
+            VersionType = GitVersionType.Branch,
+        };
+
+        private static GitQueryCommitsCriteria GetBaseCommits(GitVersionDescriptor itemVersion) => new GitQueryCommitsCriteria
+        {
+            ItemVersion = itemVersion,
+        };
+
+        private static GitPullRequest CreatePullRequest(String baseBranchName) => new GitPullRequest
         {
             Title = "Automatic Reference Update",
             Description = "Updated the reference / automatic job.",
@@ -70,7 +138,21 @@ namespace DevOpsLittleHelper
             SourceRefName = GetRefName(newBranchName),
         };
 
-        private static GitPush CreatePush(String commitId, String path, String content) => new GitPush
+        private static GitChange CreateChange(String path, String content) => new GitChange
+        {
+            ChangeType = VersionControlChangeType.Edit,
+            Item = new GitItem
+            {
+                Path = path,
+            },
+            NewContent = new ItemContent
+            {
+                Content = content,
+                ContentType = ItemContentType.RawText,
+            },
+        };
+
+        private static GitPush CreatePush(String commitId, IEnumerable<GitChange> changes) => new GitPush
         {
             RefUpdates = new List<GitRefUpdate>
             {
@@ -85,36 +167,22 @@ namespace DevOpsLittleHelper
                 new GitCommitRef
                 {
                     Comment = "Automatic reference update",
-                    Changes = new List<GitChange>
-                    {
-                        new GitChange
-                        {
-                            ChangeType = VersionControlChangeType.Edit,
-                            Item = new GitItem
-                            {
-                                Path = path,
-                            },
-                            NewContent = new ItemContent
-                            {
-                                Content = content,
-                                ContentType = ItemContentType.RawText,
-                            },
-                        }
-                    },
-                }
+                    Changes = new List<GitChange>(changes),
+                },
             },
         };
 
         private static String GetRefName(String branchName) => $"refs/heads/{branchName}";
 
-        private static async Task<String> GetContent(Stream item)
+        private static GitHttpClient CreateGitClient(String pat)
         {
-            using (var ms = new MemoryStream())
-            {
-                await item.CopyToAsync(ms).ConfigureAwait(false);
-                var raw = ms.ToArray();
-                return Encoding.UTF8.GetString(raw);
-            }
+            var creds = new VssBasicCredential(String.Empty, pat);
+
+            // Connect to Azure DevOps Services
+            var connection = new VssConnection(collectionUri, creds);
+
+            // Get a GitHttpClient to talk to the Git endpoints
+            return connection.GetClient<GitHttpClient>();
         }
     }
 }

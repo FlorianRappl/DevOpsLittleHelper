@@ -14,21 +14,23 @@ namespace DevOpsLittleHelper
         public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req, TraceWriter log)
         {
             var pat = Environment.GetEnvironmentVariable("DEVOPS_PAT") ?? throw new ArgumentException("Missing environment variable DEVOPS_PAT");
-
             log.Info("Processing request ...");
 
-            //var name = req.Query["name"].FirstOrDefault();
-            //var requestBody = new StreamReader(req.Body).ReadToEnd();
-            //dynamic data = JsonConvert.DeserializeObject(requestBody);
+            var data = await req.Body.GetRequestData().ConfigureAwait(false);
+            var projectId = data.ResourceContainers.Project.Id;
+            var packageName = "Microsoft.AspNetCore.All";
+            var packageVersion = "2.0.1";
+            log.Info($"Received data for project {projectId} ...");
 
-            var helper = new Helper(pat);
-            var prId = await helper.UpdateReferenceAndCreatePullRequest(log).ConfigureAwait(false);
+            var helper = new Helper(projectId, pat, log);
+            var prIds = await helper.UpdateReferencesAndCreatePullRequests(packageName, packageVersion).ConfigureAwait(false);
 
             return new OkObjectResult(new
             {
-                id = prId,
-                message = $"Pull Request #{prId} created.",
+                ids = prIds,
+                message = $"Pull Requests successfully created.",
             });
         }
+
     }
 }
