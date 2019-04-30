@@ -9,31 +9,30 @@ using System.Threading.Tasks;
 
 namespace DevOpsLittleHelper
 {
-    internal class Helper
+    internal class RepositoryHelper : HelperBase
     {
-        private static readonly Uri collectionUri = new Uri("https://florianrappl.visualstudio.com/");
-        private static readonly String newBranchName = "feature/auto-ref-update";
+        private static readonly Uri collectionUri = new Uri(Constants.VsoApiRoot);
 
         private readonly String _projectId;
         private readonly GitHttpClient _gitClient;
-        private readonly TraceWriter _log;
 
-        public Helper(String projectId, String pat, TraceWriter log)
+        public RepositoryHelper(String projectId, String pat, TraceWriter log)
+            : base(log)
         {
             _projectId = projectId;
             _gitClient = CreateGitClient(pat);
-            _log = log;
         }
 
         public async Task<List<Int32>> UpdateReferencesAndCreatePullRequests(String packageName, String packageVersion)
         {
             var results = new List<Int32>();
             var allRepositories = await _gitClient.GetRepositoriesAsync(_projectId).ConfigureAwait(false);
-            Log($"Received repository list: ${String.Join(", ", allRepositories.Select(m => m.Name))}.");
+            Log($"Received repository list: {String.Join(", ", allRepositories.Select(m => m.Name))}.");
 
             foreach (var repo in allRepositories)
             {
-                var pr = await UpdateReferencesAndCreatePullRequest(repo.Name, repo.DefaultBranch, packageName, packageVersion).ConfigureAwait(false);
+                var branch = repo.DefaultBranch.Replace("refs/heads/", String.Empty);
+                var pr = await UpdateReferencesAndCreatePullRequest(repo.Name, branch, packageName, packageVersion).ConfigureAwait(false);
 
                 if (pr.HasValue)
                 {
@@ -47,7 +46,7 @@ namespace DevOpsLittleHelper
         public async Task<Int32?> UpdateReferencesAndCreatePullRequest(String repoName, String baseBranchName, String packageName, String packageVersion)
         {
             var repo = await _gitClient.GetRepositoryAsync(_projectId, repoName).ConfigureAwait(false);
-            Log($"Received info about repo ${repoName}.");
+            Log($"Received info about repo {repoName}.");
 
             var versionRef = GetVersionRef(baseBranchName);
             var baseCommitInfo = GetBaseCommits(versionRef);
@@ -66,7 +65,7 @@ namespace DevOpsLittleHelper
             {
                 var push = CreatePush(lastCommit, changes);
                 await _gitClient.CreatePushAsync(push, repoId).ConfigureAwait(false);
-                Log($"Push for {repoId} at {newBranchName} created.");
+                Log($"Push for {repoId} at {Constants.NewBranchName} created.");
 
                 var pr = CreatePullRequest(baseBranchName);
                 var result = await _gitClient.CreatePullRequestAsync(pr, repoId).ConfigureAwait(false);
@@ -117,7 +116,6 @@ namespace DevOpsLittleHelper
             return oldContent;
         }
 
-        private void Log(String message) => _log.Info(message);
 
         private static GitVersionDescriptor GetVersionRef(String baseBranchName) => new GitVersionDescriptor
         {
@@ -132,10 +130,10 @@ namespace DevOpsLittleHelper
 
         private static GitPullRequest CreatePullRequest(String baseBranchName) => new GitPullRequest
         {
-            Title = "Automatic Reference Update",
-            Description = "Updated the reference / automatic job.",
+            Title = Constants.NewPrTitle,
+            Description = Constants.NewPrDescription,
             TargetRefName = GetRefName(baseBranchName),
-            SourceRefName = GetRefName(newBranchName),
+            SourceRefName = GetRefName(Constants.NewBranchName),
         };
 
         private static GitChange CreateChange(String path, String content) => new GitChange
@@ -158,7 +156,7 @@ namespace DevOpsLittleHelper
             {
                 new GitRefUpdate
                 {
-                    Name = GetRefName(newBranchName),
+                    Name = GetRefName(Constants.NewBranchName),
                     OldObjectId = commitId,
                 },
             },
@@ -166,7 +164,7 @@ namespace DevOpsLittleHelper
             {
                 new GitCommitRef
                 {
-                    Comment = "Automatic reference update",
+                    Comment = Constants.NewCommitMessage,
                     Changes = new List<GitChange>(changes),
                 },
             },
