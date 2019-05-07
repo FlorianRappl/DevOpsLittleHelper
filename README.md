@@ -25,12 +25,27 @@ You can just fork the code and make your own adjustments. The solution works und
 - Only NuGet packages (and C# .NET SDK project files `.csproj`) are supported
 - When the build succeeded the latest package is already available via the (Azure DevOps) NuGet feed
 
-All adjustments can be done via the `Constants.cs` file. There are two environment variables:
+All adjustments (for fallbacks) can be done via the `Constants.cs` file.
 
-| Variable      | Required?                       | Description                                                              |
-|---------------|---------------------------------|--------------------------------------------------------------------------|
-| `DEVOPS_ORGA` | No, has fallback                | The organization / name of the Azure DevOps account                      |
-| `DEVOPS_PAT`  | Yes                             | The Personal Access Token with access to the NuGet feed and repositories |
+For most settings the provided environment variables should be sufficient:
+
+| Variable            | Required?            | Description                                                                |
+|---------------------|----------------------|----------------------------------------------------------------------------|
+| `DEVOPS_PAT`        | Yes                  | The Personal Access Token with access to the NuGet feed and repositories   |
+| `DEVOPS_ORGA`       | No (but recommended) | The organization / name of the Azure DevOps account                        |
+| `DEVOPS_NEW_BRANCH` | No                   | The name of the new branch. See parameters below.                          |
+| `DEVOPS_PR_TITLE`   | No                   | The title of the pull request to create (if any). See parameters below.    |
+| `DEVOPS_PR_DESC`    | No                   | The description of the pull request to create (if any). Allows parameters. |
+| `DEVOPS_COMMIT_MSG` | No                   | The commit message of the pull request to create (if any). No parameters.  |
+
+The parameters to use in the provided strings are:
+
+| Parameter       | Replacement        | Description                                         |
+|-----------------|--------------------|-----------------------------------------------------|
+| Package Name    | `{packageName}`    | The name of the package to update.                  |
+| Package Version | `{packageVersion}` | The new version of the updated package.             |
+| Package Suffix  | `{suffix}`         | A sanatized (dashed) package name - version string. |
+| Dev Ops Version | `{appVersion}`     | The current version of Dev Ops Little Helper.       |
 
 Found a bug :eyes:? Report it in the issues or make a PR - any contribution appreciated :beers:!
 

@@ -31,8 +31,8 @@ namespace DevOpsLittleHelper
 
             foreach (var repo in allRepositories)
             {
-                var branch = repo.DefaultBranch.Replace("refs/heads/", String.Empty);
-                var pr = await UpdateReferencesAndCreatePullRequest(repo.Name, branch, packageName, packageVersion).ConfigureAwait(false);
+                var branchName = GetBranchName(repo.DefaultBranch);
+                var pr = await UpdateReferencesAndCreatePullRequest(repo.Name, branchName, packageName, packageVersion).ConfigureAwait(false);
 
                 if (pr.HasValue)
                 {
@@ -48,30 +48,43 @@ namespace DevOpsLittleHelper
             var repo = await _gitClient.GetRepositoryAsync(_projectId, repoName).ConfigureAwait(false);
             Log($"Received info about repo {repoName}.");
 
-            var versionRef = GetVersionRef(baseBranchName);
-            var baseCommitInfo = GetBaseCommits(versionRef);
-            var commits = await _gitClient.GetCommitsAsync(repo.Id, baseCommitInfo, top: 1).ConfigureAwait(false);
-            var lastCommit = commits.FirstOrDefault()?.CommitId;
-            Log($"Received info about last commits (expected 1, got {commits.Count}).");
+            var branches = await _gitClient.GetBranchesAsync(repo.Id).ConfigureAwait(false);
+            var targetBranchName = GetTargetBranchName(packageName, packageVersion);
+
+            var branch = 
+                branches.FirstOrDefault(m => String.Equals(m.Name, targetBranchName, StringComparison.InvariantCultureIgnoreCase)) ??
+                branches.FirstOrDefault(m => String.Equals(m.Name, baseBranchName, StringComparison.InvariantCultureIgnoreCase)) ??
+                branches.First();
+
+            var lastCommit = branch.Commit.CommitId;
+            var versionRef = GetVersionRef(branch);
+            Log($"Received info about branches ({String.Join(", ", branches.Select(m => m.Name))}). Selected '{branch.Name}'.");
 
             var items = await _gitClient.GetItemsAsync(_projectId, repo.Id, versionDescriptor: versionRef, recursionLevel: VersionControlRecursionType.Full).ConfigureAwait(false);
             var changes = await GetChanges(repo.Id, packageName, packageVersion, versionRef, items).ConfigureAwait(false);
-            return await CreatePullRequestIfChanged(repo.Id, changes, lastCommit, baseBranchName).ConfigureAwait(false);
+            return await CreatePullRequestIfChanged(repo.Id, changes, lastCommit, branch.Name, targetBranchName, packageName, packageVersion).ConfigureAwait(false);
         }
 
-        private async Task<Int32?> CreatePullRequestIfChanged(Guid repoId, List<GitChange> changes, String lastCommit, String baseBranchName)
+        private async Task<Int32?> CreatePullRequestIfChanged(Guid repoId, List<GitChange> changes, String lastCommit, String baseBranchName, String targetBranchName, String packageName, String packageVersion)
         {
             if (changes.Count > 0)
             {
-                var push = CreatePush(lastCommit, changes);
+                var title = GetTitle(packageName, packageVersion);
+                var description = GetDescription(packageName, packageVersion);
+                var commitMessage = GetCommitMessage(packageName, packageVersion);
+                var push = CreatePush(lastCommit, changes, targetBranchName, commitMessage);
                 await _gitClient.CreatePushAsync(push, repoId).ConfigureAwait(false);
-                Log($"Push for {repoId} at {Constants.NewBranchName} created.");
+                Log($"Push for {repoId} at {targetBranchName} created.");
 
-                var pr = CreatePullRequest(baseBranchName);
-                var result = await _gitClient.CreatePullRequestAsync(pr, repoId).ConfigureAwait(false);
-                Log($"Pull request for {repoId} to {baseBranchName} created.");
+                if (!String.Equals(baseBranchName, targetBranchName, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var pr = CreatePullRequest(baseBranchName, targetBranchName, title, description);
+                    var result = await _gitClient.CreatePullRequestAsync(pr, repoId).ConfigureAwait(false);
+                    Log($"Pull request for {repoId} to {baseBranchName} created.");
+                    return result.PullRequestId;
+                }
 
-                return result.PullRequestId;
+                Log($"Skipping pull request since {baseBranchName} was the target.");
             }
 
             return null;
@@ -117,9 +130,9 @@ namespace DevOpsLittleHelper
         }
 
 
-        private static GitVersionDescriptor GetVersionRef(String baseBranchName) => new GitVersionDescriptor
+        private static GitVersionDescriptor GetVersionRef(GitBranchStats branch) => new GitVersionDescriptor
         {
-            Version = baseBranchName,
+            Version = branch.Name,
             VersionType = GitVersionType.Branch,
         };
 
@@ -128,12 +141,12 @@ namespace DevOpsLittleHelper
             ItemVersion = itemVersion,
         };
 
-        private static GitPullRequest CreatePullRequest(String baseBranchName) => new GitPullRequest
+        private static GitPullRequest CreatePullRequest(String baseBranchName, String targetBranchName, String title, String description) => new GitPullRequest
         {
-            Title = Constants.NewPrTitle,
-            Description = Constants.NewPrDescription,
+            Title = title,
+            Description = description,
             TargetRefName = GetRefName(baseBranchName),
-            SourceRefName = GetRefName(Constants.NewBranchName),
+            SourceRefName = GetRefName(targetBranchName),
         };
 
         private static GitChange CreateChange(String path, String content) => new GitChange
@@ -150,13 +163,13 @@ namespace DevOpsLittleHelper
             },
         };
 
-        private static GitPush CreatePush(String commitId, IEnumerable<GitChange> changes) => new GitPush
+        private static GitPush CreatePush(String commitId, IEnumerable<GitChange> changes, String branchName, String commitMessage) => new GitPush
         {
             RefUpdates = new List<GitRefUpdate>
             {
                 new GitRefUpdate
                 {
-                    Name = GetRefName(Constants.NewBranchName),
+                    Name = GetRefName(branchName),
                     OldObjectId = commitId,
                 },
             },
@@ -164,13 +177,33 @@ namespace DevOpsLittleHelper
             {
                 new GitCommitRef
                 {
-                    Comment = Constants.NewCommitMessage,
+                    Comment = commitMessage,
                     Changes = new List<GitChange>(changes),
                 },
             },
         };
 
+        private static String GetCommitMessage(String packageName, String packageVersion) =>
+            MakeString(Constants.NewCommitMessage, packageName, packageVersion);
+
+        private static String GetDescription(String packageName, String packageVersion) => 
+            MakeString(Constants.NewPrDescription, packageName, packageVersion);
+
+        private static String GetTitle(String packageName, String packageVersion) =>
+            MakeString(Constants.NewPrTitle, packageName, packageVersion);
+
+        private static String GetTargetBranchName(String packageName, String packageVersion) =>
+            MakeString(Constants.NewBranchName, packageName, packageVersion);
+
+        private static String MakeString(String template, String packageName, String packageVersion) => template
+            .Replace("{packageName}", packageName)
+            .Replace("{packageVersion}", packageVersion)
+            .Replace("{appVersion}", Constants.AppVersion)
+            .Replace("{suffix}", $"{packageName}-{packageVersion}".Replace('.', '-').ToLower());
+
         private static String GetRefName(String branchName) => $"refs/heads/{branchName}";
+
+        private static String GetBranchName(String refName) => refName.Replace("refs/heads/", String.Empty);
 
         private static GitHttpClient CreateGitClient(String pat)
         {
