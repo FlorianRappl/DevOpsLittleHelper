@@ -27,7 +27,7 @@
         "devOpsPat": "[parameters('devOpsPat')]",
         "devOpsOrga": "[parameters('devOpsOrga')]",
         "configName": "[concat(parameters('resourceName'), '/appsettings')]",
-        "repoURL": "https://github.com/FlorianRappl/DevOpsLittleHelper",
+        "repoURL": "https://github.com/FlorianRappl/DevOpsLittleHelper.git",
         "storageAccountName": "[concat('storage', uniquestring(resourceGroup().id))]",
         "storageAccountid": "[concat(resourceGroup().id,'/providers/','Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
     },
