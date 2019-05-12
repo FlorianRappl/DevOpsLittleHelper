@@ -4,6 +4,10 @@ This project is the companion for the [serverless challenge article on CodeProje
 
 > This solution is designed for Azure Functions to give some value to Azure DevOps solutions.
 
+If you find the solution useful you can deploy it via a click of the button below.
+
+[![Deploy to Azure](https://azuredeploy.net/deploybutton.png)](https://azuredeploy.net/)
+
 ## Motivation
 
 I wanted to write a simple utility to automatically (propose an) update (of) references with respect to our internally developed / used libraries.
@@ -17,6 +21,14 @@ Whenever a new version of one of these libraries is published a webhook is trigg
 We are notified in case of a new pull request and can accept the update or deny it due to whatever reasons (incompatibilities / feature freeze / not in the mood).
 
 ## Using the Code
+
+### Deploy via Azure
+
+The by far easiest way to set this is up is via the default deploy to Azure functionality.
+
+The button at the top of the README will start the process. A deep link [is also available](https://azuredeploy.net/?repository=https://github.com/FlorianRappl/DevOpsLittleHelper).
+
+### Direct Fork
 
 You can just fork the code and make your own adjustments. The solution works under the following assumptions:
 

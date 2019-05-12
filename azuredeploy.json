@@ -1,0 +1,132 @@
+{
+    "$schema": "http://schemas.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "resourceName": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource name and prefix for all resources"
+            }
+        },
+        "devOpsPat": {
+            "type": "string",
+            "metadata": {
+                "description": "The Personal Access Token (PAT) used in Azure Dev Ops."
+            }
+        },
+        "devOpsOrga": {
+            "type": "string",
+            "metadata": {
+                "description": "The associated account name / organization in Azure Dev Ops."
+            }
+        }
+    },
+    "variables": {
+        "functionName": "[parameters('resourceName')]",
+        "planName": "[concat(parameters('resourceName'), 'plan')]",
+        "devOpsPat": "[parameters('devOpsPat')]",
+        "devOpsOrga": "[parameters('devOpsOrga')]",
+        "configName": "[concat(parameters('resourceName'), '/appsettings')]",
+        "repoURL": "https://github.com/FlorianRappl/DevOpsLittleHelper",
+        "storageAccountName": "[concat('storage', uniquestring(resourceGroup().id))]",
+        "storageAccountid": "[concat(resourceGroup().id,'/providers/','Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageAccountName')]",
+            "apiVersion": "2018-07-01",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "Storage"
+        },       
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2016-09-01",
+            "name": "[variables('planName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Y1",
+                "tier": "Dynamic",
+                "size": "Y1",
+                "family": "Y",
+                "capacity": 0
+            },
+            "properties": {
+                "name": "[variables('planName')]"
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "name": "[variables('functionName')]",
+            "apiVersion": "2016-08-01",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "kind": "functionapp",
+            "properties": {
+                "name": "[variables('functionName')]",
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~1"
+                        },
+                        {
+                            "name": "WEBJOBS_IDLE_TIMEOUT",
+                            "value": "120"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(variables('storageAccountid'),'2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "AzureWebJobsDashboard",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(variables('storageAccountid'),'2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(variables('storageAccountid'),'2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTSHARE",
+                            "value": "[toLower(variables('functionName'))]"
+                        },
+                        {
+                            "name": "DEVOPS_PAT",
+                            "value": "[variables('devOpsPat')]"
+                        },
+                        {
+                            "name": "DEVOPS_ORGA",
+                            "value": "[variables('devOpsOrga')]"
+                        }
+                    ]
+                }                
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "resources": [
+                {
+                    "apiVersion": "2015-08-01",
+                    "name": "web",
+                    "type": "sourcecontrols",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/Sites', variables('functionName'))]"
+                    ],
+                    "properties": {
+                        "RepoUrl": "[variables('repoURL')]",
+                        "branch": "master",
+                        "IsManualIntegration": true
+                    }
+                }
+            ]
+        }
+    ]
+}
