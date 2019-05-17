@@ -11,17 +11,17 @@ namespace DevOpsLittleHelper
 {
     internal class NugetHelper : HelperBase
     {
-        private static readonly String PackageVersionType = "RegistrationsBaseUrl/Versioned";
+        private static readonly string PackageVersionType = "RegistrationsBaseUrl/Versioned";
 
-        private readonly String _pat;
+        private readonly string _pat;
 
-        public NugetHelper(String pat, TraceWriter log)
+        public NugetHelper(string pat, TraceWriter log)
             : base(log)
         {
             _pat = pat;
         }
 
-        public async Task<String> ReadPackageVersion(String packageName)
+        public async Task<string> ReadPackageVersion(string packageName)
         {
             using (var http = new HttpClient())
             {
@@ -35,7 +35,7 @@ namespace DevOpsLittleHelper
             }
         }
 
-        private static async Task<String> GetPackageVersion(HttpClient http, String versionUrl, String packageName)
+        private static async Task<string> GetPackageVersion(HttpClient http, string versionUrl, string packageName)
         {
             var url = new Uri($"{versionUrl}/{packageName}");
             var content = await http.GetStringAsync(url).ConfigureAwait(false);
@@ -43,7 +43,7 @@ namespace DevOpsLittleHelper
             return obj.Items.FirstOrDefault().Upper;
         }
 
-        private static async Task<String> GetPackageVersionUrl(HttpClient http)
+        private static async Task<string> GetPackageVersionUrl(HttpClient http)
         {
             var url = new Uri($"{Constants.NuGetApiRoot}/v3/index.json");
             var content = await http.GetStringAsync(url).ConfigureAwait(false);

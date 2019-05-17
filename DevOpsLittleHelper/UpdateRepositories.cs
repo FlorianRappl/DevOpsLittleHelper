@@ -16,19 +16,25 @@ namespace DevOpsLittleHelper
         {
             var pat = Environment.GetEnvironmentVariable("DEVOPS_PAT") ?? throw new ArgumentException("Missing environment variable DEVOPS_PAT");
             var packageName = req.Query["name"].FirstOrDefault() ?? throw new NotSupportedException("Missing package name");
+            var packageType = req.Query["type"].FirstOrDefault() ?? "dotnet";
             log.Info("Processing request ...");
 
             var data = await req.Body.GetRequestData().ConfigureAwait(false);
             var projectId = data.ResourceContainers.Project.Id;
+            var repository = new RepositoryHelper(projectId, pat, log);
+            var handler = PackageHandlerFactory.Create(packageType, new HandlerOptions
+            {
+                AccessToken = pat,
+                Log = log,
+                PackageName = packageName,
+                ProjectId = projectId,
+            });
             log.Info($"Received data for project {projectId}.");
 
-            var nuget = new NugetHelper(pat, log);
-            var repository = new RepositoryHelper(projectId, pat, log);
-
-            var packageVersion = await nuget.ReadPackageVersion(packageName).ConfigureAwait(false);
+            var packageVersion = await handler.GetVersion().ConfigureAwait(false);
             log.Info($"Received version for {packageName}: {packageVersion}.");
 
-            var prIds = await repository.UpdateReferencesAndCreatePullRequests(packageName, packageVersion).ConfigureAwait(false);
+            var prIds = await repository.UpdateReferencesAndCreatePullRequests(handler, packageVersion).ConfigureAwait(false);
             log.Info($"Pull requests successfully created.");
 
             return new OkObjectResult(new

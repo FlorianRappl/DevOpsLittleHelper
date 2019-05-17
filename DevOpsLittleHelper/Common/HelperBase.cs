@@ -1,5 +1,4 @@
 ﻿using Microsoft.Azure.WebJobs.Host;
-using System;
 
 namespace DevOpsLittleHelper
 {
@@ -12,6 +11,6 @@ namespace DevOpsLittleHelper
             _log = log;
         }
 
-        protected void Log(String message) => _log.Info(message);
+        protected void Log(string message) => _log.Info(message);
     }
 }

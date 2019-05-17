@@ -16,7 +16,7 @@ namespace DevOpsLittleHelper
             return JsonConvert.DeserializeObject<WebhookRequestEntity>(requestBody);
         }
 
-        public static async Task<String> GetContent(this Stream item)
+        public static async Task<string> GetContent(this Stream item)
         {
             using (var ms = new MemoryStream())
             {
@@ -34,7 +34,22 @@ namespace DevOpsLittleHelper
             }
         }
 
-        public static Boolean StartsWith(this Byte[] content, Byte[] values, Int32 offset) => 
+        public static bool StartsWith(this byte[] content, byte[] values, int offset) => 
             content.Length > offset && values.Any(m => m == content[offset]);
+
+        public static string ReplaceFromStartToQuote(this string content, string start, string replacement)
+        {
+            var index = content.IndexOf(start);
+
+            if (index != -1)
+            {
+                var end = index + start.Length;
+                var head = content.Substring(0, end);
+                var tail = content.Substring(content.IndexOf('"', end));
+                return $"{head}{replacement}{tail}";
+            }
+
+            return content;
+        }
     }
 }

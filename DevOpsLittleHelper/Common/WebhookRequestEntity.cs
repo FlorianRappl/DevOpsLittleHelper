@@ -38,16 +38,16 @@ namespace DevOpsLittleHelper
         public class WebhookResource
         {
             [JsonProperty("id")]
-            public Int32 Id { get; set; }
+            public int Id { get; set; }
 
             [JsonProperty("buildNumber")]
-            public String BuildNumber { get; set; }
+            public string BuildNumber { get; set; }
 
             [JsonProperty("url")]
-            public String Url { get; set; }
+            public string Url { get; set; }
 
             [JsonProperty("uri")]
-            public String Uri { get; set; }
+            public string Uri { get; set; }
         }
 
         public class WebhookIdRef

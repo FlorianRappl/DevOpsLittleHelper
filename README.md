@@ -34,7 +34,10 @@ You can just fork the code and make your own adjustments. The solution works und
 
 - The trigger in Azure DevOps is a "build succeeded" trigger for a finished build job
 - The referenced URL contains a `name` parameter yielding the package reference to update (currently only a single package can be updated per installed webhook)
-- Only NuGet packages (and C# .NET SDK project files `.csproj`) are supported
+- An optional type query parameter determines the package type (by default dotnet is used)
+- Currently supported package systems:
+  - NuGet packages (and C# .NET SDK project files `.csproj`) are supported (type=dotnet)
+  - NPM packages (using package.json) are supported (type=nodejs)
 - When the build succeeded the latest package is already available via the (Azure DevOps) NuGet feed
 
 All adjustments (for fallbacks) can be done via the `Constants.cs` file.

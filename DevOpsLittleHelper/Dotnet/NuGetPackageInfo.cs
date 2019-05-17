@@ -1,5 +1,4 @@
 ﻿using Newtonsoft.Json;
-using System;
 using System.Collections.Generic;
 
 namespace DevOpsLittleHelper
@@ -12,13 +11,13 @@ namespace DevOpsLittleHelper
         public class NuGetPackageItem
         {
             [JsonProperty("lower")]
-            public String Lower { get; set; }
+            public string Lower { get; set; }
 
             [JsonProperty("upper")]
-            public String Upper { get; set; }
+            public string Upper { get; set; }
 
             [JsonProperty("count")]
-            public Int32 Count { get; set; }
+            public int Count { get; set; }
         }
     }
 }
