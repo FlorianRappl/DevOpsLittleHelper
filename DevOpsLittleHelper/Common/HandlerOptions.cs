@@ -7,6 +7,6 @@ namespace DevOpsLittleHelper
         public TraceWriter Log;
         public string AccessToken;
         public string PackageName;
-        public string ProjectId;
+        public string[] ProjectIds;
     }
 }
