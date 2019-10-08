@@ -22,6 +22,16 @@ We are notified in case of a new pull request and can accept the update or deny 
 
 ## Using the Code
 
+### Call Function
+
+The following query parameters exist.
+
+| Parameter | Required? | Description                                                       |
+| --------- | --------- | ----------------------------------------------------------------- |
+| name      | Yes       | The name of the package to look for                               |
+| type      | No        | The type of project, "dotnet" (NuGet; default) or "nodejs" (NPM)  |
+| projects  | No        | The optionally additional (comma separated) project IDs to update |
+
 ### Deploy via Azure
 
 The by far easiest way to set this is up is via the default deploy to Azure functionality.
