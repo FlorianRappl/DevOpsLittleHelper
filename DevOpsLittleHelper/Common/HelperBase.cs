@@ -1,4 +1,5 @@
 ﻿using Microsoft.Azure.WebJobs.Host;
+using System;
 
 namespace DevOpsLittleHelper
 {
@@ -12,5 +13,7 @@ namespace DevOpsLittleHelper
         }
 
         protected void Log(string message) => _log.Info(message);
+
+        protected void Error(Exception error) => _log.Error("Exception handled.", error);
     }
 }

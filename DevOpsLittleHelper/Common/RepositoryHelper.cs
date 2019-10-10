@@ -28,23 +28,17 @@ namespace DevOpsLittleHelper
             var subResults = await Task.WhenAll(_projectIds.Select(async projectId =>
             {
                 var results = new List<int>();
-                var allRepositories = await _gitClient.GetRepositoriesAsync(projectId).ConfigureAwait(false);
-                Log($"Received repository list: {string.Join(", ", allRepositories.Select(m => m.Name))}.");
+                var allRepositories = await GetRepositories(projectId).ConfigureAwait(false);
 
                 foreach (var repo in allRepositories)
                 {
                     // New repositories have no branches yet -> no default branch
                     if (repo.DefaultBranch != null)
                     {
-                        var branchName = GetBranchName(repo.DefaultBranch);
-                        var pr = await UpdateReferencesAndCreatePullRequest(projectId, repo.Name, branchName, handler, packageVersion).ConfigureAwait(false);
-
-                        if (pr.HasValue)
-                        {
-                            results.Add(pr.Value);
-                        }
+                        await UpdateBranchAndCreatePullRequest(handler, packageVersion, projectId, repo, results).ConfigureAwait(false);
                     }
                 }
+
                 return results;
             }).ToArray());
             return subResults.SelectMany(m => m).ToList();
@@ -71,6 +65,40 @@ namespace DevOpsLittleHelper
             var items = await _gitClient.GetItemsAsync(projectId, repo.Id, versionDescriptor: versionRef, recursionLevel: VersionControlRecursionType.Full).ConfigureAwait(false);
             var changes = await GetChanges(repo.Id, handler, packageVersion, versionRef, items).ConfigureAwait(false);
             return await CreatePullRequestIfChanged(repo.Id, changes, lastCommit, branch.Name, targetBranchName, replacer).ConfigureAwait(false);
+        }
+
+        private async Task<List<GitRepository>> GetRepositories(string projectId)
+        {
+            try
+            {
+                var allRepositories = await _gitClient.GetRepositoriesAsync(projectId).ConfigureAwait(false);
+                Log($"Received repository list: {string.Join(", ", allRepositories.Select(m => m.Name))}.");
+                return allRepositories;
+            }
+            catch (Exception ex)
+            {
+                Error(ex);
+                return new List<GitRepository>();
+            }
+        }
+
+        private async Task UpdateBranchAndCreatePullRequest(IPackageHandler handler, string packageVersion, string projectId, GitRepository repo, List<int> results)
+        {
+            var branchName = GetBranchName(repo.DefaultBranch);
+
+            try
+            {
+                var pr = await UpdateReferencesAndCreatePullRequest(projectId, repo.Name, branchName, handler, packageVersion).ConfigureAwait(false);
+
+                if (pr.HasValue)
+                {
+                    results.Add(pr.Value);
+                }
+            }
+            catch (Exception ex)
+            {
+                Error(ex);
+            }
         }
 
         private async Task<int?> CreatePullRequestIfChanged(Guid repoId, List<GitChange> changes, string lastCommit, string baseBranchName, string targetBranchName, ITemplateReplacer replacer)
