@@ -20,6 +20,8 @@ namespace DevOpsLittleHelper
 
         public static readonly string NewCommitMessage = Environment.GetEnvironmentVariable("DEVOPS_COMMIT_MSG") ?? "Automatic reference update";
 
+        public static readonly bool IgnoreValidationBuilds = !(bool.TryParse(Environment.GetEnvironmentVariable("DEVOPS_IGNORE_PR") ?? "True", out var r) && !r);
+
         public static readonly string AppVersion = "0.3.0";
     }
 }

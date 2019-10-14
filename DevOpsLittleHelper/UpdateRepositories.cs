@@ -18,31 +18,41 @@ namespace DevOpsLittleHelper
             var packageName = req.Query["name"].FirstOrDefault() ?? throw new NotSupportedException("Missing package name");
             var packageType = req.Query["type"].FirstOrDefault() ?? "dotnet";
             var projects = (req.Query["projects"].FirstOrDefault() ?? "").Split(',').Select(m => m.Trim());
-            log.Info("Processing request ...");
 
             var data = await req.Body.GetRequestData().ConfigureAwait(false);
-            var projectId = data.ResourceContainers.Project.Id;
-            var projectIds = projects.Concat(new[] { projectId }).Distinct().ToArray();
-            var repository = new RepositoryHelper(projectIds, pat, log);
-            var handler = PackageHandlerFactory.Create(packageType, new HandlerOptions
+            var reason = data.Resource.Reason;
+
+            if (!Constants.IgnoreValidationBuilds || reason != "validateShelveset")
             {
-                AccessToken = pat,
-                Log = log,
-                PackageName = packageName,
-                ProjectIds = projectIds,
-            });
-            log.Info($"Received data for projects '{string.Join("', '", projectIds)}'.");
+                log.Info("Processing request ...");
+                var projectId = data.ResourceContainers.Project.Id;
+                var projectIds = projects.Concat(new[] { projectId }).Distinct().ToArray();
+                var repository = new RepositoryHelper(projectIds, pat, log);
+                var handler = PackageHandlerFactory.Create(packageType, new HandlerOptions
+                {
+                    AccessToken = pat,
+                    Log = log,
+                    PackageName = packageName,
+                    ProjectIds = projectIds,
+                });
+                log.Info($"Received data for projects '{string.Join("', '", projectIds)}'.");
 
-            var packageVersion = await handler.GetVersion().ConfigureAwait(false);
-            log.Info($"Received version for {packageName}: {packageVersion}.");
+                var packageVersion = await handler.GetVersion().ConfigureAwait(false);
+                log.Info($"Received version for {packageName}: {packageVersion}.");
 
-            var prIds = await repository.UpdateReferencesAndCreatePullRequests(handler, packageVersion).ConfigureAwait(false);
-            log.Info($"Pull requests successfully created.");
+                var prIds = await repository.UpdateReferencesAndCreatePullRequests(handler, packageVersion).ConfigureAwait(false);
+                log.Info($"Pull requests successfully created.");
+
+                return new OkObjectResult(new
+                {
+                    ids = prIds,
+                    message = $"Pull Requests successfully created.",
+                });
+            }
 
             return new OkObjectResult(new
             {
-                ids = prIds,
-                message = $"Pull Requests successfully created.",
+                message = $"Ignored due to Pull Request validation build.",
             });
         }
     }

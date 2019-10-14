@@ -43,6 +43,9 @@ namespace DevOpsLittleHelper
             [JsonProperty("buildNumber")]
             public string BuildNumber { get; set; }
 
+            [JsonProperty("reason")]
+            public string Reason { get; set; }
+
             [JsonProperty("url")]
             public string Url { get; set; }
 

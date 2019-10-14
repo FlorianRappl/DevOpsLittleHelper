@@ -62,6 +62,7 @@ For most settings the provided environment variables should be sufficient:
 | `DEVOPS_PR_TITLE`   | No                   | The title of the pull request to create (if any). See parameters below.    |
 | `DEVOPS_PR_DESC`    | No                   | The description of the pull request to create (if any). Allows parameters. |
 | `DEVOPS_COMMIT_MSG` | No                   | The commit message of the pull request to create (if any). No parameters.  |
+| `DEVOPS_IGNORE_PR`  | No                   | Defines if validation builds are ignored, by default "true".               |
 
 The parameters to use in the provided strings are:
 
@@ -69,7 +70,7 @@ The parameters to use in the provided strings are:
 |-----------------|--------------------|-----------------------------------------------------|
 | Package Name    | `{packageName}`    | The name of the package to update.                  |
 | Package Version | `{packageVersion}` | The new version of the updated package.             |
-| Package Suffix  | `{suffix}`         | A sanatized (dashed) package name - version string. |
+| Package Suffix  | `{suffix}`         | A sanitized (dashed) package name - version string. |
 | Dev Ops Version | `{appVersion}`     | The current version of Dev Ops Little Helper.       |
 
 Found a bug :eyes:? Report it in the issues or make a PR - any contribution appreciated :beers:!
